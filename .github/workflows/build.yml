@@ -1,33 +1,52 @@
-name: Build and Compile AutoIt Script
+name: Build Four-Tris (Complete Package)
 
 on:
-  workflow_dispatch: # Позволяет запускать сборку вручную
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
 
     steps:
-    # 1. Скачивание исходного кода репозитория
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # 2. Скачивание и установка AutoIt в тихом режиме
-    - name: Download and Install AutoIt3
+    - name: Install AutoIt3
       shell: powershell
       run: |
         Invoke-WebRequest -Uri "https://www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3-setup.exe" -OutFile "autoit-setup.exe"
         Start-Process -FilePath ".\autoit-setup.exe" -ArgumentList "/S" -Wait
 
-    # 3. Компиляция скрипта .au3 в .exe файл
     - name: Compile AutoIt Script
       shell: cmd
       run: |
         "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe.exe" /in "Tetris.au3" /out "four-tris.exe"
 
-    # 4. Сохранение скомпилированного файла как артефакт сборки
-    - name: Upload Artifact
+    - name: Create distribution package
+      shell: powershell
+      run: |
+        # Создаем папку для дистрибутива
+        New-Item -ItemType Directory -Path "dist" -Force
+        
+        # Копируем скомпилированный exe
+        Copy-Item "four-tris.exe" -Destination "dist\"
+        
+        # Копируем все необходимые папки и файлы
+        Copy-Item "textures" -Destination "dist\" -Recurse
+        Copy-Item "se" -Destination "dist\" -Recurse
+        Copy-Item "lib" -Destination "dist\" -Recurse
+        Copy-Item "ai" -Destination "dist\" -Recurse
+        Copy-Item "colors.ini" -Destination "dist\"
+        Copy-Item "settings.ini" -Destination "dist\"
+        Copy-Item "buttons.bmp" -Destination "dist\"
+        Copy-Item "icon.ico" -Destination "dist\"
+        
+        Write-Host "Содержимое папки dist:"
+        Get-ChildItem "dist" -Recurse | Select-Object FullName
+
+    - name: Upload Complete Package
       uses: actions/upload-artifact@v4
       with:
-        name: Compiled-Executable
-        path: four-tris.exe
+        name: four-tris-complete
+        path: dist/
+        retention-days: 7
