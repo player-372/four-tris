@@ -1,4 +1,4 @@
-name: Build Four-Tris (Stable CMD Build)
+name: Build Four-Tris (Latest Release)
 
 on:
   workflow_dispatch:
@@ -8,62 +8,56 @@ jobs:
     runs-on: windows-latest
     
     steps:
-      - name: 1. Скачивание исходного кода
-        uses: actions/checkout@v4
-
-      - name: 2. Установка AutoIt3
+      - name: 1. Получение последнего релиза
+        # Используем API GitHub чтобы найти последний стабильный релиз
+        id: get_release
         run: |
-          Write-Host "Скачивание и установка AutoIt..."
+          $response = Invoke-RestMethod -Uri "https://api.github.com/repos/fiorescarlatto/four-tris/releases/latest"
+          $tagName = $response.tag_name
+          Write-Host "Найден последний релиз: $tagName"
+          echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: 2. Скачивание кода релиза (вместо master)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.get_release.outputs.tag_name }}
+          # Если тегов нет, используем последний коммит с работающим кодом
+          # ref: "v1.5.2"  # <-- замените на актуальный тег из releases
+
+      - name: 3. Установка AutoIt3
+        run: |
+          Write-Host "Скачивание AutoIt..."
           Invoke-WebRequest -Uri "https://www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3-setup.exe" -OutFile "autoit-setup.exe"
           Start-Process -FilePath "autoit-setup.exe" -ArgumentList "/S" -Wait
-          Write-Host "Установка завершена."
 
-      - name: 3. Компиляция через Aut2Exe (CMD режим)
-        # Явно указываем использовать классический cmd.exe вместо PowerShell для максимальной совместимости
+      - name: 4. Компиляция релизной версии
         shell: cmd
         run: |
           echo =========================================
-          echo Начало компиляции в стабильном режиме...
+          echo Компиляция релизной версии...
           echo =========================================
           
-          REM Переходим в директорию репозитория (на всякий случай)
           cd /d "%GITHUB_WORKSPACE%"
           
-          REM Используем базовый компилятор. Он стабильнее работает в CI-средах, 
-          чем x64-версия, и создаст exe, который отлично работает на вашей 64-битной Windows.
           set COMPILER="C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe.exe"
-          
-          REM Используем абсолютные пути, чтобы компилятор точно нашел файл
           set SCRIPT="%CD%\Tetris.au3"
-          set OUTPUT="%CD%\four-tris-clean.exe"
+          set OUTPUT="%CD%\four-tris-release.exe"
           
-          echo Компилятор: %COMPILER%
-          echo Скрипт: %SCRIPT%
-          echo Результат: %OUTPUT%
-          echo.
-          
-          REM Запускаем компиляцию БЕЗ параметра /icon (он часто вызывает молчаливые краши в CI)
+          echo Компиляция...
           %COMPILER% /in %SCRIPT% /out %OUTPUT%
           
-          REM Проверяем код завершения
           if %ERRORLEVEL% NEQ 0 (
-              echo.
-              echo =========================================
-              echo ОШИБКА: Компиляция завершилась с кодом %ERRORLEVEL%
-              echo =========================================
+              echo ОШИБКА компиляции: %ERRORLEVEL%
               exit /b %ERRORLEVEL%
           )
           
-          echo.
-          echo =========================================
-          echo УСПЕХ! Файл успешно создан.
-          echo Проверка наличия файла:
-          dir "%CD%\four-tris-clean.exe"
-          echo =========================================
+          echo УСПЕХ!
+          dir "%CD%\four-tris-release.exe"
 
-      - name: 4. Сохранение результата (Артефакт)
+      - name: 5. Сохранение артефакта
         uses: actions/upload-artifact@v4
         with:
-          name: four-tris-clean
-          path: four-tris-clean.exe
+          name: four-tris-release
+          path: four-tris-release.exe
           retention-days: 7
