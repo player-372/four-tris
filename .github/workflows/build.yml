@@ -1,40 +1,77 @@
 name: Build Four-Tris (AutoIt)
 
 on:
-  workflow_dispatch: # Позволяет запускать сборку вручную по кнопке
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: windows-latest # Используем настоящую Windows от GitHub
+    runs-on: windows-latest
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install AutoIt
         run: |
-          # Скачиваем официальный установщик AutoIt
+          Write-Host "Downloading AutoIt..."
           Invoke-WebRequest -Uri "https://www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3-setup.exe" -OutFile "autoit-setup.exe"
-          # Устанавливаем его в тихом режиме
+          Write-Host "Installing AutoIt..."
           Start-Process -FilePath "autoit-setup.exe" -ArgumentList "/S" -Wait
+          Write-Host "AutoIt installed successfully"
 
-      - name: Compile AutoIt Script
+      - name: Find and compile script
         run: |
-          # Находим главный .au3 файл в репозитории
-          $au3File = (Get-ChildItem -Recurse -Filter *.au3 | Select-Object -First 1).FullName
+          # Find the main .au3 file
+          $au3File = (Get-ChildItem -Recurse -Filter "*.au3" | Where-Object { $_.Name -eq "Tetris.au3" -or $_.Name -eq "main.au3" -or $_.Name -eq "four-tris.au3" } | Select-Object -First 1).FullName
+          
+          if (-not $au3File) {
+            $au3File = (Get-ChildItem -Recurse -Filter "*.au3" | Select-Object -First 1).FullName
+          }
+          
           Write-Host "Found script: $au3File"
           
-          # Путь к компилятору Aut2Exe (64-битная версия)
+          # Verify the file exists
+          if (-not (Test-Path $au3File)) {
+            Write-Error "AutoIt script not found!"
+            exit 1
+          }
+          
+          # Show first few lines to debug
+          Write-Host "First 20 lines of script:"
+          Get-Content $au3File | Select-Object -First 20
+          
+          # Path to Aut2Exe compiler
           $compiler = "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe_x64.exe"
+          
+          if (-not (Test-Path $compiler)) {
+            Write-Host "Trying alternative compiler path..."
+            $compiler = "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe.exe"
+          }
+          
+          if (-not (Test-Path $compiler)) {
+            Write-Error "AutoIt compiler not found!"
+            exit 1
+          }
+          
           $outputExe = Join-Path $env:GITHUB_WORKSPACE "four-tris-clean.exe"
           
-          # Компиляция
-          & $compiler /in "$au3File" /out "$outputExe" /x64
-          Write-Host "Compilation successful: $outputExe"
+          Write-Host "Compiling with: $compiler"
+          Write-Host "Output: $outputExe"
+          
+          # Compile with verbose output
+          & $compiler /in "$au3File" /out "$outputExe" /x64 /x64 /nopack
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Compilation successful!"
+            Write-Host "File size: $((Get-Item $outputExe).Length) bytes"
+          } else {
+            Write-Error "Compilation failed with exit code: $LASTEXITCODE"
+            exit 1
+          }
 
       - name: Upload compiled executable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: four-tris-clean-build
           path: four-tris-clean.exe
-          retention-days: 7 # Файл будет храниться 7 дней
+          retention-days: 7
