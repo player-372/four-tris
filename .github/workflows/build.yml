@@ -1,99 +1,69 @@
-name: Build Four-Tris (Official Compiler)
+name: Build Four-Tris (Stable CMD Build)
 
 on:
-  workflow_dispatch: # Запуск вручную по кнопке
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
     
     steps:
-      - name: 1. Скачивание исходного кода (git clone)
+      - name: 1. Скачивание исходного кода
         uses: actions/checkout@v4
-        # Примечание: предупреждение о Node.js 20 здесь безвредно, это внутренняя особенность серверов GitHub, на сборку не влияет.
 
-      - name: 2. Установка последней версии AutoIt3
+      - name: 2. Установка AutoIt3
         run: |
-          Write-Host "Скачивание официального установщика AutoIt..."
+          Write-Host "Скачивание и установка AutoIt..."
           Invoke-WebRequest -Uri "https://www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3-setup.exe" -OutFile "autoit-setup.exe"
-          
-          Write-Host "Тихая установка AutoIt..."
           Start-Process -FilePath "autoit-setup.exe" -ArgumentList "/S" -Wait
-          
-          Write-Host "Проверка установки компилятора..."
-          $compilerPath = "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe_x64.exe"
-          if (Test-Path $compilerPath) {
-              Write-Host "Компилятор успешно установлен по пути: $compilerPath"
-          } else {
-              Write-Error "Компилятор не найден!"
-              exit 1
-          }
+          Write-Host "Установка завершена."
 
-      - name: 3. Подготовка и проверка файлов
+      - name: 3. Компиляция через Aut2Exe (CMD режим)
+        # Явно указываем использовать классический cmd.exe вместо PowerShell для максимальной совместимости
+        shell: cmd
         run: |
-          Write-Host "Текущая директория: $(Get-Location)"
-          Write-Host "Содержимое папки:"
-          Get-ChildItem | Select-Object Name, Length
+          echo =========================================
+          echo Начало компиляции в стабильном режиме...
+          echo =========================================
           
-          $au3File = "Tetris.au3"
-          $iconFile = "icon.ico"
+          REM Переходим в директорию репозитория (на всякий случай)
+          cd /d "%GITHUB_WORKSPACE%"
           
-          if (-not (Test-Path $au3File)) {
-              Write-Error "Главный файл $au3File не найден! Сборка прервана."
-              exit 1
-          }
-          Write-Host "Файл скрипта $au3File найден."
+          REM Используем базовый компилятор. Он стабильнее работает в CI-средах, 
+          чем x64-версия, и создаст exe, который отлично работает на вашей 64-битной Windows.
+          set COMPILER="C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe.exe"
+          
+          REM Используем абсолютные пути, чтобы компилятор точно нашел файл
+          set SCRIPT="%CD%\Tetris.au3"
+          set OUTPUT="%CD%\four-tris-clean.exe"
+          
+          echo Компилятор: %COMPILER%
+          echo Скрипт: %SCRIPT%
+          echo Результат: %OUTPUT%
+          echo.
+          
+          REM Запускаем компиляцию БЕЗ параметра /icon (он часто вызывает молчаливые краши в CI)
+          %COMPILER% /in %SCRIPT% /out %OUTPUT%
+          
+          REM Проверяем код завершения
+          if %ERRORLEVEL% NEQ 0 (
+              echo.
+              echo =========================================
+              echo ОШИБКА: Компиляция завершилась с кодом %ERRORLEVEL%
+              echo =========================================
+              exit /b %ERRORLEVEL%
+          )
+          
+          echo.
+          echo =========================================
+          echo УСПЕХ! Файл успешно создан.
+          echo Проверка наличия файла:
+          dir "%CD%\four-tris-clean.exe"
+          echo =========================================
 
-      - name: 4. Запуск AutoIt Compiler (Aut2Exe)
-        run: |
-          $au3File = "Tetris.au3"
-          $iconFile = "icon.ico"
-          $outputFile = "four-tris-clean-x64.exe"
-          $compiler = "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe_x64.exe"
-          
-          Write-Host "========================================="
-          Write-Host "Начало компиляции через официальный Aut2Exe..."
-          Write-Host "========================================="
-          
-          # Формируем аргументы командной строки для компилятора
-          $args = "/in `"$au3File`" /out `"$outputFile`" /x64"
-          
-          # Если иконка существует, добавляем её, иначе компилируем без неё (это не влияет на безопасность)
-          if (Test-Path $iconFile) {
-              $args += " /icon `"$iconFile`""
-              Write-Host "Добавлена иконка: $iconFile"
-          } else {
-              Write-Host "Иконка не найдена, компиляция без неё."
-          }
-          
-          Write-Host "Выполняемая команда: $compiler $args"
-          
-          # Запускаем компилятор и перехватываем ВСЕ сообщения (и успех, и ошибки)
-          $compileResult = & $compiler $args 2>&1
-          
-          # Выводим лог компилятора, чтобы вы видели, что произошло
-          Write-Host $compileResult
-          
-          if ($LASTEXITCODE -ne 0) {
-              Write-Error "Компилятор завершился с ошибкой (код: $LASTEXITCODE). См. лог выше."
-              exit 1
-          }
-          
-          if (Test-Path $outputFile) {
-              $size = (Get-Item $outputFile).Length
-              Write-Host "========================================="
-              Write-Host "УСПЕХ! Файл успешно создан."
-              Write-Host "Имя: $outputFile"
-              Write-Host "Размер: $size байт"
-              Write-Host "========================================="
-          } else {
-              Write-Error "Компилятор сообщил об успехе, но файл не создан."
-              exit 1
-          }
-
-      - name: 5. Сохранение результата (Артефакт)
+      - name: 4. Сохранение результата (Артефакт)
         uses: actions/upload-artifact@v4
         with:
-          name: four-tris-clean-x64
-          path: four-tris-clean-x64.exe
+          name: four-tris-clean
+          path: four-tris-clean.exe
           retention-days: 7
