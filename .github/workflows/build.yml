@@ -1,59 +1,33 @@
-name: Build Four-Tris (Final Attempt)
+name: Build and Compile AutoIt Script
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Позволяет запускать сборку вручную
 
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 5
-    
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    # 1. Скачивание исходного кода репозитория
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Install AutoIt
-        run: |
-          Invoke-WebRequest -Uri "https://www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3-setup.exe" -OutFile "autoit-setup.exe"
-          Start-Process -FilePath "autoit-setup.exe" -ArgumentList "/S" -Wait
+    # 2. Скачивание и установка AutoIt в тихом режиме
+    - name: Download and Install AutoIt3
+      shell: powershell
+      run: |
+        Invoke-WebRequest -Uri "https://www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3-setup.exe" -OutFile "autoit-setup.exe"
+        Start-Process -FilePath ".\autoit-setup.exe" -ArgumentList "/S" -Wait
 
-      - name: Compile
-        shell: pwsh
-        run: |
-          Set-Location $env:GITHUB_WORKSPACE
-          
-          # Пробуем 32-bit компилятор (более стабилен в CI)
-          $compiler = "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe.exe"
-          
-          # Запускаем с таймаутом и перехватом вывода
-          $job = Start-Job -ScriptBlock {
-            Set-Location $using:env:GITHUB_WORKSPACE
-            & $using:compiler /in "Tetris.au3" /out "four-tris.exe" /ErrorStdOut 2>&1
-          }
-          
-          # Ждем максимум 3 минуты
-          $result = Wait-Job $job -Timeout 180
-          
-          if ($result) {
-            Receive-Job $job
-            Remove-Job $job
-          } else {
-            Write-Host "TIMEOUT: Компиляция заняла больше 3 минут. Останавливаем."
-            Stop-Job $job
-            Remove-Job $job
-            exit 1
-          }
-          
-          if (Test-Path "four-tris.exe") {
-            Write-Host "SUCCESS: Файл создан"
-          } else {
-            Write-Host "ERROR: Файл не создан"
-            exit 1
-          }
+    # 3. Компиляция скрипта .au3 в .exe файл
+    - name: Compile AutoIt Script
+      shell: cmd
+      run: |
+        "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe.exe" /in "Tetris.au3" /out "four-tris.exe"
 
-      - name: Upload
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: four-tris
-          path: four-tris.exe
+    # 4. Сохранение скомпилированного файла как артефакт сборки
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Compiled-Executable
+        path: four-tris.exe
