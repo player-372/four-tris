@@ -1,4 +1,4 @@
-name: Build Four-Tris (Clean Build)
+name: Build Four-Tris (Debug Round 2)
 
 on:
   workflow_dispatch:
@@ -17,20 +17,25 @@ jobs:
         Invoke-WebRequest -Uri "https://www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3-setup.exe" -OutFile "autoit-setup.exe"
         Start-Process -FilePath ".\autoit-setup.exe" -ArgumentList "/S" -Wait
 
-    - name: Compile AutoIt Script (x64)
+    - name: Check Script for Errors (Au3Check)
       shell: cmd
       run: |
-        echo Compiling Tetris.au3...
+        echo "=== Running Au3Check ==="
+        "C:\Program Files (x86)\AutoIt3\Au3Check.exe" "Tetris.au3"
+        echo "Au3Check exit code: %ERRORLEVEL%"
+
+    - name: Compile AutoIt Script (x64)
+      if: success()
+      shell: cmd
+      run: |
         "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe_x64.exe" /in "Tetris.au3" /out "four-tris.exe" /x64
-        echo Compilation finished with code: %ERRORLEVEL%
 
     - name: Create distribution package
+      if: success()
       shell: powershell
       run: |
         New-Item -ItemType Directory -Path "dist" -Force
         Copy-Item "four-tris.exe" -Destination "dist\"
-        
-        # Копируем все необходимые папки, чтобы игра работала
         Copy-Item "textures" -Destination "dist\" -Recurse -ErrorAction SilentlyContinue
         Copy-Item "se" -Destination "dist\" -Recurse -ErrorAction SilentlyContinue
         Copy-Item "lib" -Destination "dist\" -Recurse -ErrorAction SilentlyContinue
@@ -38,8 +43,9 @@ jobs:
         Copy-Item "colors.ini", "settings.ini", "buttons.bmp", "icon.ico" -Destination "dist\" -ErrorAction SilentlyContinue
 
     - name: Upload Complete Package
+      if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: four-tris-working-build
+        name: four-tris-build
         path: dist/
         retention-days: 7
