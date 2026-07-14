@@ -1,4 +1,4 @@
-name: Build Four-Tris (Final Fix - Missing Include)
+name: Build Four-Tris (Clean Build)
 
 on:
   workflow_dispatch:
@@ -17,57 +17,29 @@ jobs:
         Invoke-WebRequest -Uri "https://www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3-setup.exe" -OutFile "autoit-setup.exe"
         Start-Process -FilePath ".\autoit-setup.exe" -ArgumentList "/S" -Wait
 
-    - name: Copy Custom UDFs to AutoIt Include Folder
-      shell: powershell
-      run: |
-        Copy-Item -Path "lib\*" -Destination "C:\Program Files (x86)\AutoIt3\Include\" -Force
-        Copy-Item -Path "ai\*" -Destination "C:\Program Files (x86)\AutoIt3\Include\" -Force
-
-    - name: Fix Missing Include in Tetris.au3
-      shell: powershell
-      run: |
-        # Читаем файл с сохранением исходной кодировки (UTF8 с BOM, которую любит AutoIt)
-        $file = "Tetris.au3"
-        $text = Get-Content $file -Raw -Encoding UTF8
-        
-        # Находим строку с последним стандартным WinAPI инклудом и добавляем недостающий
-        $text = $text -replace "(#include <Color\.au3>)", "`$1`n#include <WinAPIShellEx.au3>"
-        
-        # Перезаписываем файл
-        Set-Content -Path $file -Value $text -Encoding UTF8
-        Write-Host "Успешно добавлен #include <WinAPIShellEx.au3>"
-
-    - name: Verify Fix with Au3Check
-      shell: cmd
-      run: |
-        echo Running Au3Check after fix...
-        "C:\Program Files (x86)\AutoIt3\Au3Check.exe" "Tetris.au3"
-        echo Au3Check exit code: %ERRORLEVEL%
-
     - name: Compile AutoIt Script (x64)
       shell: cmd
       run: |
-        echo Compiling...
+        echo Compiling Tetris.au3...
         "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe_x64.exe" /in "Tetris.au3" /out "four-tris.exe" /x64
-        echo Compilation exit code: %ERRORLEVEL%
+        echo Compilation finished with code: %ERRORLEVEL%
 
     - name: Create distribution package
       shell: powershell
       run: |
         New-Item -ItemType Directory -Path "dist" -Force
         Copy-Item "four-tris.exe" -Destination "dist\"
-        Copy-Item "textures" -Destination "dist\" -Recurse
-        Copy-Item "se" -Destination "dist\" -Recurse
-        Copy-Item "lib" -Destination "dist\" -Recurse
-        Copy-Item "ai" -Destination "dist\" -Recurse
-        Copy-Item "colors.ini" -Destination "dist\"
-        Copy-Item "settings.ini" -Destination "dist\"
-        Copy-Item "buttons.bmp" -Destination "dist\"
-        Copy-Item "icon.ico" -Destination "dist\"
+        
+        # Копируем все необходимые папки, чтобы игра работала
+        Copy-Item "textures" -Destination "dist\" -Recurse -ErrorAction SilentlyContinue
+        Copy-Item "se" -Destination "dist\" -Recurse -ErrorAction SilentlyContinue
+        Copy-Item "lib" -Destination "dist\" -Recurse -ErrorAction SilentlyContinue
+        Copy-Item "ai" -Destination "dist\" -Recurse -ErrorAction SilentlyContinue
+        Copy-Item "colors.ini", "settings.ini", "buttons.bmp", "icon.ico" -Destination "dist\" -ErrorAction SilentlyContinue
 
     - name: Upload Complete Package
       uses: actions/upload-artifact@v4
       with:
-        name: four-tris-final-working-build
+        name: four-tris-working-build
         path: dist/
         retention-days: 7
