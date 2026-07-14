@@ -1,4 +1,4 @@
-name: Build Four-Tris (Minimal)
+name: Build Four-Tris (Final Attempt)
 
 on:
   workflow_dispatch:
@@ -6,6 +6,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 5
     
     steps:
       - name: Checkout
@@ -17,14 +18,42 @@ jobs:
           Start-Process -FilePath "autoit-setup.exe" -ArgumentList "/S" -Wait
 
       - name: Compile
-        shell: cmd
+        shell: pwsh
         run: |
-          cd /d "%GITHUB_WORKSPACE%"
-          "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe_x64.exe" /in "Tetris.au3" /out "four-tris.exe" /x64 /ErrorStdOut
+          Set-Location $env:GITHUB_WORKSPACE
+          
+          # Пробуем 32-bit компилятор (более стабилен в CI)
+          $compiler = "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe.exe"
+          
+          # Запускаем с таймаутом и перехватом вывода
+          $job = Start-Job -ScriptBlock {
+            Set-Location $using:env:GITHUB_WORKSPACE
+            & $using:compiler /in "Tetris.au3" /out "four-tris.exe" /ErrorStdOut 2>&1
+          }
+          
+          # Ждем максимум 3 минуты
+          $result = Wait-Job $job -Timeout 180
+          
+          if ($result) {
+            Receive-Job $job
+            Remove-Job $job
+          } else {
+            Write-Host "TIMEOUT: Компиляция заняла больше 3 минут. Останавливаем."
+            Stop-Job $job
+            Remove-Job $job
+            exit 1
+          }
+          
+          if (Test-Path "four-tris.exe") {
+            Write-Host "SUCCESS: Файл создан"
+          } else {
+            Write-Host "ERROR: Файл не создан"
+            exit 1
+          }
 
       - name: Upload
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: four-tris
           path: four-tris.exe
-          retention-days: 7
