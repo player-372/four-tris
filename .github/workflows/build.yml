@@ -1,4 +1,4 @@
-name: Build Four-Tris (With Diagnostics)
+name: Build Four-Tris (Final Fix - Missing Include)
 
 on:
   workflow_dispatch:
@@ -23,17 +23,33 @@ jobs:
         Copy-Item -Path "lib\*" -Destination "C:\Program Files (x86)\AutoIt3\Include\" -Force
         Copy-Item -Path "ai\*" -Destination "C:\Program Files (x86)\AutoIt3\Include\" -Force
 
-    - name: Check Script for Errors (Au3Check)
+    - name: Fix Missing Include in Tetris.au3
+      shell: powershell
+      run: |
+        # Читаем файл с сохранением исходной кодировки (UTF8 с BOM, которую любит AutoIt)
+        $file = "Tetris.au3"
+        $text = Get-Content $file -Raw -Encoding UTF8
+        
+        # Находим строку с последним стандартным WinAPI инклудом и добавляем недостающий
+        $text = $text -replace "(#include <Color\.au3>)", "`$1`n#include <WinAPIShellEx.au3>"
+        
+        # Перезаписываем файл
+        Set-Content -Path $file -Value $text -Encoding UTF8
+        Write-Host "Успешно добавлен #include <WinAPIShellEx.au3>"
+
+    - name: Verify Fix with Au3Check
       shell: cmd
       run: |
-        echo Running Au3Check...
+        echo Running Au3Check after fix...
         "C:\Program Files (x86)\AutoIt3\Au3Check.exe" "Tetris.au3"
         echo Au3Check exit code: %ERRORLEVEL%
 
     - name: Compile AutoIt Script (x64)
       shell: cmd
       run: |
+        echo Compiling...
         "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe_x64.exe" /in "Tetris.au3" /out "four-tris.exe" /x64
+        echo Compilation exit code: %ERRORLEVEL%
 
     - name: Create distribution package
       shell: powershell
@@ -52,6 +68,6 @@ jobs:
     - name: Upload Complete Package
       uses: actions/upload-artifact@v4
       with:
-        name: four-tris-with-diagnostics
+        name: four-tris-final-working-build
         path: dist/
         retention-days: 7
