@@ -1,4 +1,4 @@
-name: Build Four-Tris (With Library Fix)
+name: Build Four-Tris (With Diagnostics)
 
 on:
   workflow_dispatch:
@@ -21,7 +21,14 @@ jobs:
       shell: powershell
       run: |
         Copy-Item -Path "lib\*" -Destination "C:\Program Files (x86)\AutoIt3\Include\" -Force
-        Write-Host "Libraries copied to AutoIt Include folder"
+        Copy-Item -Path "ai\*" -Destination "C:\Program Files (x86)\AutoIt3\Include\" -Force
+
+    - name: Check Script for Errors (Au3Check)
+      shell: cmd
+      run: |
+        echo Running Au3Check...
+        "C:\Program Files (x86)\AutoIt3\Au3Check.exe" "Tetris.au3"
+        echo Au3Check exit code: %ERRORLEVEL%
 
     - name: Compile AutoIt Script (x64)
       shell: cmd
@@ -45,6 +52,6 @@ jobs:
     - name: Upload Complete Package
       uses: actions/upload-artifact@v4
       with:
-        name: four-tris-fixed
+        name: four-tris-with-diagnostics
         path: dist/
         retention-days: 7
