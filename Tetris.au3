@@ -38,6 +38,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/gpl.html>.
 #include <Array.au3>
 #include <Color.au3>
 #include <WinAPIShellEx.au3>
+#include <WinAPISysWin.au3>
 
 #include 'lib\Keyboard.au3'
 #include 'lib\Base64.au3'
