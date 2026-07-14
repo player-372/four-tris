@@ -1,4 +1,4 @@
-name: Build Four-Tris (Latest Release)
+name: Build Four-Tris (Final Fix)
 
 on:
   workflow_dispatch:
@@ -8,56 +8,64 @@ jobs:
     runs-on: windows-latest
     
     steps:
-      - name: 1. Получение последнего релиза
-        # Используем API GitHub чтобы найти последний стабильный релиз
-        id: get_release
-        run: |
-          $response = Invoke-RestMethod -Uri "https://api.github.com/repos/fiorescarlatto/four-tris/releases/latest"
-          $tagName = $response.tag_name
-          Write-Host "Найден последний релиз: $tagName"
-          echo "tag_name=$tagName" >> $env:GITHUB_OUTPUT
-        shell: pwsh
-
-      - name: 2. Скачивание кода релиза (вместо master)
+      - name: 1. Скачивание исходного кода
         uses: actions/checkout@v4
-        with:
-          ref: ${{ steps.get_release.outputs.tag_name }}
-          # Если тегов нет, используем последний коммит с работающим кодом
-          # ref: "v1.5.2"  # <-- замените на актуальный тег из releases
 
-      - name: 3. Установка AutoIt3
+      - name: 2. Установка AutoIt3
         run: |
-          Write-Host "Скачивание AutoIt..."
+          Write-Host "Скачивание и установка AutoIt..."
           Invoke-WebRequest -Uri "https://www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3-setup.exe" -OutFile "autoit-setup.exe"
           Start-Process -FilePath "autoit-setup.exe" -ArgumentList "/S" -Wait
+          Write-Host "AutoIt установлен."
 
-      - name: 4. Компиляция релизной версии
-        shell: cmd
+      - name: 3. Компиляция с выводом ошибок в консоль (ErrorStdOut)
+        shell: pwsh
         run: |
-          echo =========================================
-          echo Компиляция релизной версии...
-          echo =========================================
+          Write-Host "========================================="
+          Write-Host "Начало компиляции..."
+          Write-Host "========================================="
           
-          cd /d "%GITHUB_WORKSPACE%"
+          # Используем 64-битный компилятор, как того требует скрипт
+          $compiler = "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe_x64.exe"
+          $script = Join-Path $env:GITHUB_WORKSPACE "Tetris.au3"
+          $output = Join-Path $env:GITHUB_WORKSPACE "four-tris-clean-x64.exe"
+          $icon = Join-Path $env:GITHUB_WORKSPACE "icon.ico"
           
-          set COMPILER="C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe.exe"
-          set SCRIPT="%CD%\Tetris.au3"
-          set OUTPUT="%CD%\four-tris-release.exe"
+          Write-Host "Компилятор: $compiler"
+          Write-Host "Скрипт: $script"
+          Write-Host "Вывод: $output"
           
-          echo Компиляция...
-          %COMPILER% /in %SCRIPT% /out %OUTPUT%
+          # Формируем аргументы. /ErrorStdOut - КРИТИЧЕСКИ ВАЖЕН для CI!
+          $args = "/in `"$script`" /out `"$output`" /x64 /icon `"$icon`" /ErrorStdOut"
           
-          if %ERRORLEVEL% NEQ 0 (
-              echo ОШИБКА компиляции: %ERRORLEVEL%
-              exit /b %ERRORLEVEL%
-          )
+          Write-Host "Запуск: $compiler $args"
+          Write-Host "-----------------------------------------"
           
-          echo УСПЕХ!
-          dir "%CD%\four-tris-release.exe"
+          # Запускаем и перехватываем вывод
+          $process = Start-Process -FilePath $compiler -ArgumentList $args -NoNewWindow -Wait -PassThru
+          
+          Write-Host "-----------------------------------------"
+          Write-Host "Код завершения процесса: $($process.ExitCode)"
+          
+          if ($process.ExitCode -ne 0) {
+              Write-Error "Компиляция завершилась с ошибкой! Код: $($process.ExitCode)"
+              exit 1
+          }
+          
+          if (Test-Path $output) {
+              $size = (Get-Item $output).Length
+              Write-Host "========================================="
+              Write-Host "УСПЕХ! Файл создан."
+              Write-Host "Размер: $size байт"
+              Write-Host "========================================="
+          } else {
+              Write-Error "Процесс завершился с кодом 0, но файл не найден."
+              exit 1
+          }
 
-      - name: 5. Сохранение артефакта
+      - name: 4. Сохранение артефакта
         uses: actions/upload-artifact@v4
         with:
-          name: four-tris-release
-          path: four-tris-release.exe
+          name: four-tris-clean-x64
+          path: four-tris-clean-x64.exe
           retention-days: 7
