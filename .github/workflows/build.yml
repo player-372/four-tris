@@ -1,65 +1,97 @@
-name: Build Four-Tris (AutoIt)
+name: Build Four-Tris (Official Compiler)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Запуск вручную по кнопке
 
 jobs:
   build:
     runs-on: windows-latest
     
     steps:
-      - name: Checkout repository
+      - name: 1. Скачивание исходного кода (git clone)
         uses: actions/checkout@v4
+        # Примечание: предупреждение о Node.js 20 здесь безвредно, это внутренняя особенность серверов GitHub, на сборку не влияет.
 
-      - name: Install AutoIt
+      - name: 2. Установка последней версии AutoIt3
         run: |
-          Write-Host "Downloading AutoIt..."
+          Write-Host "Скачивание официального установщика AutoIt..."
           Invoke-WebRequest -Uri "https://www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3-setup.exe" -OutFile "autoit-setup.exe"
-          Write-Host "Installing AutoIt silently..."
+          
+          Write-Host "Тихая установка AutoIt..."
           Start-Process -FilePath "autoit-setup.exe" -ArgumentList "/S" -Wait
-          Write-Host "AutoIt installed successfully."
-
-      - name: Compile with AutoIt3Wrapper
-        run: |
-          # Находим основной скрипт
-          $au3File = (Get-ChildItem -Recurse -Filter "Tetris.au3" | Select-Object -First 1).FullName
-          if (-not $au3File) {
-            Write-Error "Tetris.au3 not found!"
-            exit 1
+          
+          Write-Host "Проверка установки компилятора..."
+          $compilerPath = "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe_x64.exe"
+          if (Test-Path $compilerPath) {
+              Write-Host "Компилятор успешно установлен по пути: $compilerPath"
+          } else {
+              Write-Error "Компилятор не найден!"
+              exit 1
           }
-          Write-Host "Found script: $au3File"
+
+      - name: 3. Подготовка и проверка файлов
+        run: |
+          Write-Host "Текущая директория: $(Get-Location)"
+          Write-Host "Содержимое папки:"
+          Get-ChildItem | Select-Object Name, Length
           
-          # Пути к инструментам AutoIt
-          $autoItExe = "C:\Program Files (x86)\AutoIt3\AutoIt3.exe"
-          $wrapperScript = "C:\Program Files (x86)\AutoIt3\SciTE\AutoIt3Wrapper\AutoIt3Wrapper.au3"
+          $au3File = "Tetris.au3"
+          $iconFile = "icon.ico"
           
-          # Запускаем официальный Wrapper в режиме production (/prod)
-          # Он сам прочитает #AutoIt3Wrapper_Outfile_x64 и соберет всё как надо
-          Write-Host "Starting compilation via AutoIt3Wrapper..."
-          & $autoItExe $wrapperScript /in "$au3File" /prod
+          if (-not (Test-Path $au3File)) {
+              Write-Error "Главный файл $au3File не найден! Сборка прервана."
+              exit 1
+          }
+          Write-Host "Файл скрипта $au3File найден."
+
+      - name: 4. Запуск AutoIt Compiler (Aut2Exe)
+        run: |
+          $au3File = "Tetris.au3"
+          $iconFile = "icon.ico"
+          $outputFile = "four-tris-clean-x64.exe"
+          $compiler = "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe_x64.exe"
+          
+          Write-Host "========================================="
+          Write-Host "Начало компиляции через официальный Aut2Exe..."
+          Write-Host "========================================="
+          
+          # Формируем аргументы командной строки для компилятора
+          $args = "/in `"$au3File`" /out `"$outputFile`" /x64"
+          
+          # Если иконка существует, добавляем её, иначе компилируем без неё (это не влияет на безопасность)
+          if (Test-Path $iconFile) {
+              $args += " /icon `"$iconFile`""
+              Write-Host "Добавлена иконка: $iconFile"
+          } else {
+              Write-Host "Иконка не найдена, компиляция без неё."
+          }
+          
+          Write-Host "Выполняемая команда: $compiler $args"
+          
+          # Запускаем компилятор и перехватываем ВСЕ сообщения (и успех, и ошибки)
+          $compileResult = & $compiler $args 2>&1
+          
+          # Выводим лог компилятора, чтобы вы видели, что произошло
+          Write-Host $compileResult
           
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Compilation failed with exit code: $LASTEXITCODE"
-            exit 1
+              Write-Error "Компилятор завершился с ошибкой (код: $LASTEXITCODE). См. лог выше."
+              exit 1
           }
           
-          # Согласно директивам в коде, файл будет создан здесь:
-          $expectedOutput = "build\current\four-tris-x64.exe"
-          
-          if (Test-Path $expectedOutput) {
-            Write-Host "Compilation successful!"
-            Write-Host "Output file size: $((Get-Item $expectedOutput).Length) bytes"
-            
-            # Копируем файл в корень репозитория для удобной загрузки артефакта
-            Copy-Item -Path $expectedOutput -Destination "four-tris-clean-x64.exe"
+          if (Test-Path $outputFile) {
+              $size = (Get-Item $outputFile).Length
+              Write-Host "========================================="
+              Write-Host "УСПЕХ! Файл успешно создан."
+              Write-Host "Имя: $outputFile"
+              Write-Host "Размер: $size байт"
+              Write-Host "========================================="
           } else {
-            Write-Error "Compilation finished, but output file was not found at: $expectedOutput"
-            # Выведем список файлов в папке build для отладки, если что-то пошло не так
-            Get-ChildItem -Path "build" -Recurse -ErrorAction SilentlyContinue
-            exit 1
+              Write-Error "Компилятор сообщил об успехе, но файл не создан."
+              exit 1
           }
 
-      - name: Upload compiled executable
+      - name: 5. Сохранение результата (Артефакт)
         uses: actions/upload-artifact@v4
         with:
           name: four-tris-clean-x64
