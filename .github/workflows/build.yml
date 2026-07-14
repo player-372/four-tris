@@ -1,4 +1,4 @@
-name: Build Four-Tris (Final Fix)
+name: Build Four-Tris (Minimal)
 
 on:
   workflow_dispatch:
@@ -8,64 +8,23 @@ jobs:
     runs-on: windows-latest
     
     steps:
-      - name: 1. Скачивание исходного кода
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 2. Установка AutoIt3
+      - name: Install AutoIt
         run: |
-          Write-Host "Скачивание и установка AutoIt..."
           Invoke-WebRequest -Uri "https://www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3-setup.exe" -OutFile "autoit-setup.exe"
           Start-Process -FilePath "autoit-setup.exe" -ArgumentList "/S" -Wait
-          Write-Host "AutoIt установлен."
 
-      - name: 3. Компиляция с выводом ошибок в консоль (ErrorStdOut)
-        shell: pwsh
+      - name: Compile
+        shell: cmd
         run: |
-          Write-Host "========================================="
-          Write-Host "Начало компиляции..."
-          Write-Host "========================================="
-          
-          # Используем 64-битный компилятор, как того требует скрипт
-          $compiler = "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe_x64.exe"
-          $script = Join-Path $env:GITHUB_WORKSPACE "Tetris.au3"
-          $output = Join-Path $env:GITHUB_WORKSPACE "four-tris-clean-x64.exe"
-          $icon = Join-Path $env:GITHUB_WORKSPACE "icon.ico"
-          
-          Write-Host "Компилятор: $compiler"
-          Write-Host "Скрипт: $script"
-          Write-Host "Вывод: $output"
-          
-          # Формируем аргументы. /ErrorStdOut - КРИТИЧЕСКИ ВАЖЕН для CI!
-          $args = "/in `"$script`" /out `"$output`" /x64 /icon `"$icon`" /ErrorStdOut"
-          
-          Write-Host "Запуск: $compiler $args"
-          Write-Host "-----------------------------------------"
-          
-          # Запускаем и перехватываем вывод
-          $process = Start-Process -FilePath $compiler -ArgumentList $args -NoNewWindow -Wait -PassThru
-          
-          Write-Host "-----------------------------------------"
-          Write-Host "Код завершения процесса: $($process.ExitCode)"
-          
-          if ($process.ExitCode -ne 0) {
-              Write-Error "Компиляция завершилась с ошибкой! Код: $($process.ExitCode)"
-              exit 1
-          }
-          
-          if (Test-Path $output) {
-              $size = (Get-Item $output).Length
-              Write-Host "========================================="
-              Write-Host "УСПЕХ! Файл создан."
-              Write-Host "Размер: $size байт"
-              Write-Host "========================================="
-          } else {
-              Write-Error "Процесс завершился с кодом 0, но файл не найден."
-              exit 1
-          }
+          cd /d "%GITHUB_WORKSPACE%"
+          "C:\Program Files (x86)\AutoIt3\Aut2Exe\Aut2Exe_x64.exe" /in "Tetris.au3" /out "four-tris.exe" /x64 /ErrorStdOut
 
-      - name: 4. Сохранение артефакта
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: four-tris-clean-x64
-          path: four-tris-clean-x64.exe
+          name: four-tris
+          path: four-tris.exe
           retention-days: 7
